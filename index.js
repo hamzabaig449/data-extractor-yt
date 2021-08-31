@@ -20,6 +20,8 @@ crawl();
 
 let exportData = [];
 
+console.log("You are in the youtube extractor Crawler ")
+
 async function crawl() {
   try {
     (async () => {
