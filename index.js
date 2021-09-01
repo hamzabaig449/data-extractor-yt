@@ -13,6 +13,8 @@ var logger = require('morgan');
 const session = require('express-session');
 const fileUpload = require('express-fileupload');
 
+const port = process.env.PORT || 3000;
+
 var app = express();
 var authRouter = require('./routes/auth');
 app.use(fileUpload({
@@ -58,6 +60,8 @@ app.use(function(err, req, res, next) {
   res.status(err.status || 500);
   res.render('500');
 });
-app.listen('3000')
+app.listen(port,()=>{
+  console.log(`server is listening on port ${port}`);
+})
 
 module.exports = app;
