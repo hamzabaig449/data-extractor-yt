@@ -5,192 +5,59 @@ let MINIMUM_VIEWS = "0";
 let MAXIMUM_VIEWS = "1000000";
 let EXPORT_FILE_NAME = "Youtube_Data.xlsx";
 
-const puppeteer = require("puppeteer");
-const LanguageDetect = require("languagedetect");
-const languageDetect = new LanguageDetect();
-const countryLookup = require("country-code-lookup");
-const emailExtractor = require("node-email-extractor").default;
-const extractUrls = require("extract-urls");
-const dateformat = require("dateformat");
-const deabbreviateNumber = require("deabbreviate-number");
-const json2xls = require("json2xls");
-const fs = require("fs");
+var createError = require('http-errors');
+var express = require('express');
+var path = require('path');
+var cookieParser = require('cookie-parser');
+var logger = require('morgan');
+const session = require('express-session');
+const fileUpload = require('express-fileupload');
 
-crawl();
+var app = express();
+var authRouter = require('./routes/auth');
+app.use(fileUpload({
+  createParentPath:true
+}));
 
-let exportData = [];
+// view engine setup
+app.set('views', path.join(__dirname, 'views'));
+app.set('view engine', 'ejs');
 
-console.log("You are in the youtube extractor Crawler ")
-
-async function crawl() {
-  try {
-    (async () => {
-      const browser = await puppeteer.launch();
-      let page = await browser.newPage();
-      await page.goto("https://www.channelcrawler.com", {
-        waitUntil: "networkidle2",
-      });
-      await page.type("#queryName", QUERY);
-      await page.type("#queryMinSubs", MINIMUM_SUBSCRIBERS);
-      await page.type("#queryMaxSubs", MAXIMUM_SUBSCRIBERS);
-      await page.type("#queryMinViews", MINIMUM_VIEWS);
-      await page.type("#queryMaxViews", MAXIMUM_VIEWS);
-      //Uncomment and add/subtract tags in the below line if needed
-      //await page.type("#queryTags", "" + <TAGS>);
-
-      await page.click("button.submitbutton.btn.btn-primary.btn-lg");
-      await page.waitForSelector(
-        "#main-content > div:nth-child(1) > div.col-xs-9.col-sm-4 > h3"
-      );
-      let itemCountElement = await page.$(
-        "#main-content > div:nth-child(1) > div.col-xs-9.col-sm-4 > h3"
-      );
-      let itemCount = await page.evaluate(
-        (el) => el.innerText,
-        itemCountElement
-      );
-      itemCount = itemCount.replace(/\D/g, "");
-      console.log("You got " + itemCount + " results for your query");
-      await crawlResultSet(browser, page);
-      await writeToFile();
-      await browser.close();
-    })();
-  } catch (err) {
-    console.error(err);
+app.use(logger('dev'));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(session({
+  secret: 'hfasjddJHJDHF JSHJdh SA42136487@&#(()@!',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    maxage: 1000*3600*24
   }
-}
+}))
 
-async function crawlResultSet(browser, page) {
-  try {
-    await pursueLinks(browser, page);
-    while (true) {
-      let disabledElement = await page.$(
-        "#main-content > div:nth-child(3) > div > nav > ul > li.disabled > a"
-      );
-      let disabledText =
-        disabledElement != null
-          ? await page.evaluate((el) => el.textContent, disabledElement)
-          : null;
-      if (disabledText != null && disabledText == "Next") {
-        console.log("End!");
-        break;
-      } else {
-        try {
-          await page.click(
-            "#main-content > div:nth-child(3) > div > nav > ul > li.next > a"
-          );
-        } catch (error) {
-          console.log("End!");
-          break;
-        }
 
-        await page.waitForSelector(
-          "#main-content > div:nth-child(1) > div.col-xs-9.col-sm-4 > h3"
-        );
-        await pursueLinks(browser, page);
-      }
-    }
-  } catch (error) {
-    console.error(error);
-  }
-}
+app.use('/', authRouter);
 
-async function pursueLinks(browser, page) {
-  try {
-    let channels = await page.$$(
-      "#main-content > div.row > div.channel.col-xs-12.col-sm-4.col-lg-3"
-    );
-    for (let channel of channels) {
-      var payload = [];
-      let channelData = {};
 
-      let links = await channel.$$("a");
-      var counter = 0;
-      for (let link of links) {
-        switch (counter) {
-          case 0:
-            channelData["channel_name"] = await page.evaluate(
-              (a) => a.title,
-              link
-            );
-            channelData["url"] = await page.evaluate((a) => a.href, link);
-            break;
-          case 1:
-            channelData["description"] = await page.evaluate(
-              (a) => a.title,
-              link
-            );
-            break;
-        }
-        counter++;
-      }
-      channelData["channel_id"] = channelData["url"].substr(
-        channelData["url"].lastIndexOf("/") + 1
-      );
+// catch 404 and forward to error handler
+app.use(function(req, res, next) {
+  // next(createError(404));
+  res.status(404);
+  res.render('404')
+});
 
-      try {
-        channelData["detected_language"] =
-          languageDetect.detect(
-            channelData["description"] ?? "english"
-          )[0][0] ?? "english";
-      } catch (error) {
-        channelData["detected_language"] = "english";
-      }
+// error handler
+app.use(function(err, req, res, next) {
+  // set locals, only providing error in development
+  res.locals.message = err.message;
+  res.locals.error = req.app.get('env') === 'development' ? err : {};
+  console.log(err.message)
+  // render the error page
+  res.status(err.status || 500);
+  res.render('500');
+});
+app.listen('3000')
 
-      var descEmailIds = emailExtractor.text(channelData["description"]).emails;
-      if (Array.isArray(descEmailIds) && descEmailIds.length > 0) {
-        channelData["desc_email_ids"] = descEmailIds.toString();
-      }
-      var descUrls = extractUrls(channelData["description"]);
-      if (Array.isArray(descUrls) && descUrls.length > 0) {
-        channelData["desc_urls"] = descUrls.toString();
-      }
-      let countryFlagGIF = await channel.$("h4 > img");
-      var countryCode =
-        countryFlagGIF != null
-          ? await page.evaluate(
-              (el) => el.src.substr(el.src.lastIndexOf("/") + 1),
-              countryFlagGIF
-            )
-          : null;
-      if (countryCode != null) {
-        channelData["country_code"] = countryCode
-          .substr(0, countryCode.indexOf("."))
-          .toUpperCase();
-        channelData["country_name"] = countryLookup.byIso(
-          channelData["country_code"]
-        ).country;
-      }
-      channelData["user_photo_url"] = await channel.$eval(
-        "a > img",
-        (img) => img.src
-      );
-      channelData["category"] = await channel.$eval(
-        "small > b",
-        (el) => el.textContent
-      );
-      var channelInfo = (
-        await channel.$eval("p > small", (el) => el.textContent)
-      )
-        .replace(/\t/g, "")
-        .split(/\r?\n/);
-      channelData["subscribers"] = channelInfo[1].split(" ")[0];
-      channelData["videos"] = channelInfo[2].split(" ")[0];
-      channelData["views"] = channelInfo[3].split(" ")[0];
-      channelData["last_upload_date"] = dateformat(channelInfo[4], "isoDate");
-      console.log(channelData);
-      exportData.push(channelData);
-    }
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-async function writeToFile() {
-  try {
-    var xls = json2xls(exportData);
-    fs.writeFileSync(EXPORT_FILE_NAME, xls, "binary");
-  } catch (e) {
-    console.error("Export error! " + e);
-  }
-}
+module.exports = app;
