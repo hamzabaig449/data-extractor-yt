@@ -199,13 +199,7 @@ async function writeToFile() {
   try {
     var xls = json2xls(exportData);
     fs.writeFileSync(EXPORT_FILE_NAME, xls, "binary");
-    console.log("''''''''''''''''''''''''''''''''''''''''''''");
-console.log("''''''''''''''''''''''''''''''''''''''''''''");
-console.log("''''''''''''''''''''''''''''''''''''''''''''");
-console.log("''''''''''''''''''''''''''''''''''''''''''''");
-
-console.log(exportData);
-res.render("selectChoice",{exportData : exportData});
+    res.render("selectChoice",{exportData : exportData});
   } catch (e) {
     console.error("Export error! " + e);
   }
